@@ -1,6 +1,6 @@
 export const CITIES = [
 {id:'buf',name:'Buffalo',x:66,y:119,lat:42.89,lon:-78.87},{id:'alb',name:'Albany',x:222,y:143,lat:42.65,lon:-73.75},{id:'bos',name:'Boston',x:337,y:183,lat:42.36,lon:-71.06},{id:'scr',name:'Scranton',x:145,y:257,lat:41.41,lon:-75.66},{id:'har',name:'Hartford',x:259,y:231,lat:41.76,lon:-72.67},{id:'pro',name:'Providence',x:331,y:264,lat:41.82,lon:-71.41},{id:'nyc',name:'New York',x:237,y:328,lat:40.71,lon:-74.01},{id:'phi',name:'Philadelphia',x:171,y:398,lat:39.95,lon:-75.17},{id:'bal',name:'Baltimore',x:117,y:470,lat:39.29,lon:-76.61},{id:'dc',name:'Washington DC',x:76,y:529,lat:38.91,lon:-77.04}];
-export const CARDS={grant:{name:'Rail Grant',icon:'▤',tag:'PUBLIC WORKS',description:'Your next route costs 4 less. Its stations gain 2 waiting passengers each.',target:'none'},station:{name:'Station Upgrade',icon:'⌂',tag:'INFRASTRUCTURE',description:'Pay 4 funds: a station handles 6 more passengers, including transfers. Attracts +1 passenger each season.',target:'city'},express:{name:'Express Line',icon:'➟',tag:'OPERATIONS',description:'Pay 3 funds: a line carries 4 more passengers each season. Costs 1 fund each season.',target:'route'},boom:{name:'Boom Town',icon:'✦',tag:'DEVELOPMENT',description:'One city earns +2 funds each season, but adds +2 demand. Connect it first!',target:'city'},survey:{name:'Survey Crew',icon:'⌖',tag:'PLANNING',description:'Your next route costs 2 less and carries 2 extra passengers each season. Uses an action.',target:'none'},bonds:{name:'Civic Bonds',icon:'◈',tag:'FINANCE',description:'Receive 8 funds now. Repay 2 each season for the next 5 seasons.',target:'none'}};
+export const CARDS={grant:{name:'Rail Grant',icon:'▤',tag:'PUBLIC WORKS',description:'Your next route costs 4 less. Every stop on its new track gains 2 waiting passengers.',target:'none'},station:{name:'Station Upgrade',icon:'⌂',tag:'INFRASTRUCTURE',description:'Pay 4 funds: a station handles 6 more passengers, including transfers. Attracts +1 passenger each season.',target:'city'},express:{name:'Express Line',icon:'➟',tag:'OPERATIONS',description:'Pay 3 funds: one track segment carries 4 more passengers each season. Costs 1 fund each season.',target:'route'},boom:{name:'Boom Town',icon:'✦',tag:'DEVELOPMENT',description:'One city earns +2 funds each season, but adds +2 demand. Connect it first!',target:'city'},survey:{name:'Survey Crew',icon:'⌖',tag:'PLANNING',description:'Your next route costs 2 less and carries 2 extra passengers each season. Uses an action.',target:'none'},bonds:{name:'Civic Bonds',icon:'◈',tag:'FINANCE',description:'Receive 8 funds now. Repay 2 each season for the next 5 seasons.',target:'none'}};
 const deck=['grant','station','bonds','express','boom','survey'];
 export const CHALLENGES=[
 {type:'GEOGRAPHY',question:'Which of these cities lies farthest west?',answers:['Buffalo','Albany','Scranton'],correct:0,fact:'Buffalo sits on Lake Erie, at the western edge of New York.'},
@@ -13,15 +13,30 @@ export const CHALLENGES=[
 export const DESTINATIONS={buf:'alb',alb:'nyc',bos:'nyc',scr:'nyc',har:'bos',pro:'bos',nyc:'bos',phi:'nyc',bal:'phi',dc:'bal'};
 export const QUEUE_LIMIT=160;
 export function createGame(seed=1920){
- const s={version:2,seed,turn:1,actions:2,funds:18,score:0,congestion:0,routes:[],cities:Object.fromEntries(CITIES.map(c=>[c.id,{queue:0,level:0,upgrade:0,boom:false}])),tickets:CITIES.map(c=>({from:c.id,to:DESTINATIONS[c.id],count:1,born:0})),hand:['grant','station','bonds'],draw:3,discount:0,survey:false,debt:0,status:'playing',challenge:null,challengeDone:0,lastReport:null,totalServed:0};syncQueues(s);return s;
+ const s={version:3,seed,turn:1,actions:2,funds:18,score:0,congestion:0,routes:[],cities:Object.fromEntries(CITIES.map(c=>[c.id,{queue:0,level:0,upgrade:0,boom:false}])),tickets:CITIES.map(c=>({from:c.id,to:DESTINATIONS[c.id],count:1,born:0})),hand:['grant','station','bonds'],draw:3,discount:0,survey:false,debt:0,status:'playing',challenge:null,challengeDone:0,lastReport:null,totalServed:0};syncQueues(s);return s;
 }
 export function distance(a,b){const A=CITIES.find(c=>c.id===a),B=CITIES.find(c=>c.id===b);return A&&B?Math.hypot((A.lon-B.lon)*82,(A.lat-B.lat)*111):Infinity;}
-export function routeCost(s,a,b){return Math.max(2,Math.ceil(distance(a,b)/65)+2-s.discount);}
+// Stop detection uses the same illustrated coordinates as the board, so what
+// passes along a city on the map becomes a real station in the network.
+export function routeStops(a,b){
+ const A=CITIES.find(c=>c.id===a),B=CITIES.find(c=>c.id===b);if(!A||!B||a===b)return [];
+ // Resolve in a canonical direction so reversing a selection is identical.
+ if(CITIES.indexOf(A)>CITIES.indexOf(B))return routeStops(b,a).reverse();
+ const dx=B.x-A.x,dy=B.y-A.y,length2=dx*dx+dy*dy;
+ const intermediate=CITIES.filter(c=>c.id!==a&&c.id!==b).map(c=>{const t=((c.x-A.x)*dx+(c.y-A.y)*dy)/length2;return {id:c.id,t,offset:Math.hypot(c.x-A.x-t*dx,c.y-A.y-t*dy)};}).filter(c=>c.t>0&&c.t<1&&c.offset<=45).sort((c,d)=>c.t-d.t).map(c=>c.id);
+ return [a,...intermediate,b];
+}
+export function routePlan(s,a,b){
+ const stops=routeStops(a,b),segments=stops.slice(1).map((id,i)=>({a:stops[i],b:id,existing:s.routes.some(r=>(r.a===stops[i]&&r.b===id)||(r.b===stops[i]&&r.a===id))}));
+ const newSegments=segments.filter(r=>!r.existing),km=newSegments.reduce((n,r)=>n+distance(r.a,r.b),0);
+ return {stops,segments,newSegments,cost:newSegments.length?Math.max(2,Math.ceil(km/65)+2-s.discount):0};
+}
+export function routeCost(s,a,b){return routeStops(a,b).length?routePlan(s,a,b).cost:Infinity;}
 export function capacity(s,id){return 12+s.cities[id].upgrade*6;}
 export function demand(s,id){return 1+(id==='nyc'||id==='bos'?1:0)+Math.floor((s.turn-1)/8)+Math.floor(s.cities[id].level/2)+s.cities[id].upgrade+(s.cities[id].boom?2:0);}
 export function findPath(s,from,to,remaining=null,stations=null){
  if(from===to)return {cities:[from],routes:[]};
- // Dijkstra: a direct line can shorten a journey; depleted lines/stations are excluded.
+ // Dijkstra: passengers board and transfer at real stops; full tracks/stations are excluded.
  const dist={[from]:0},previous={},todo=new Set(Object.keys(s.cities));
  while(todo.size){let id=null;for(const candidate of todo)if(dist[candidate]!==undefined&&(id===null||dist[candidate]<dist[id]))id=candidate;if(id===null)break;todo.delete(id);if(id===to){const cities=[to],routes=[];while(cities[0]!==from){const p=previous[cities[0]];routes.unshift(p.route);cities.unshift(p.city);}return {cities,routes};}
  if(stations&&stations[id]<=0)continue;
@@ -31,7 +46,18 @@ export function findPath(s,from,to,remaining=null,stations=null){
 function syncQueues(s){for(const c of Object.values(s.cities))c.queue=0;for(const t of s.tickets)s.cities[t.from].queue+=t.count;s.congestion=Math.min(100,Math.round(s.tickets.reduce((n,t)=>n+t.count,0)/QUEUE_LIMIT*100));}
 function addTickets(s,id,count){s.tickets.push({from:id,to:DESTINATIONS[id],count,born:s.turn});}
 function available(s){return s.status==='playing'&&s.challenge===null&&s.actions>0;}
-export function buildRoute(s,a,b){if(!available(s))return 'No actions left. End the season for two more.';if(!s.cities[a]||!s.cities[b]||a===b)return 'Choose two different cities.';if(s.routes.some(r=>(r.a===a&&r.b===b)||(r.a===b&&r.b===a)))return 'This line already exists. Use Express Line to increase its capacity.';const cost=routeCost(s,a,b);if(s.funds<cost)return `You need ${cost} funds for this route.`;s.funds-=cost;s.actions--;s.routes.push({a,b,capacity:6+(s.survey?2:0),express:false});if(s.discount===4){addTickets(s,a,2);addTickets(s,b,2);}s.discount=0;s.survey=false;syncQueues(s);return null;}
+export function buildRoute(s,a,b){
+ if(!available(s))return 'No actions left. End the season for two more.';
+ if(!s.cities[a]||!s.cities[b]||a===b)return 'Choose two different cities.';
+ const plan=routePlan(s,a,b);
+ if(!plan.newSegments.length)return 'All these tracks already exist. Select a segment for Express Line, or extend to another city.';
+ if(s.funds<plan.cost)return `You need ${plan.cost} funds for this route.`;
+ s.funds-=plan.cost;s.actions--;
+ for(const segment of plan.newSegments)s.routes.push({a:segment.a,b:segment.b,capacity:6+(s.survey?2:0),express:false});
+ // A grant attracts riders at every newly served station, not just endpoints.
+ if(s.discount===4){const stations=new Set(plan.newSegments.flatMap(r=>[r.a,r.b]));for(const id of stations)addTickets(s,id,2);}
+ s.discount=0;s.survey=false;syncQueues(s);return null;
+}
 export function playCard(s,index,target){if(!available(s))return 'No actions left. End the season for two more.';const key=s.hand[index],card=CARDS[key];if(!card)return 'Card unavailable.';if(card.target==='city'&&!s.cities[target])return 'Choose a city on the map.';if(key==='station'&&s.funds<4)return 'Station upgrade needs 4 funds.';if(key==='express'){const r=s.routes[target];if(!r)return 'Choose an existing rail route.';if(r.express)return 'This line is already express.';if(s.funds<3)return 'Express service needs 3 funds.';r.capacity+=4;r.express=true;s.funds-=3;}
  if(key==='grant'||key==='survey'){if(s.discount)return 'Build your discounted route first.';s.discount=key==='grant'?4:2;s.survey=key==='survey';}
  if(key==='station'){s.funds-=4;s.cities[target].upgrade++;}
