@@ -31,14 +31,18 @@ No backend, API keys, domain, or server configuration required. Vite builds with
 
 ## Rules
 
-- Two actions each season. Building a route or playing a card consumes one action. Unused actions expire.
-- Route cost uses approximate geographic distance. Each route serves 3 passengers at **each endpoint** per season. Capacity stacks across routes; the MVP abstracts passenger destinations.
-- Each season adds demand, serves queues, awards score, then pays income (5 base funds plus 1 per served city). Demand rises at seasons 7, 13, and 19, and prosperous cities attract up to 3 extra passengers per season.
-- Congestion is total waiting passengers divided by 160, expressed as a percentage. At 100% the game ends. Survive season 24 to win.
-- Cards are replaced immediately in a deterministic deck. Grants and surveys apply to the next route; stations and boom towns permanently attract demand; express service and bonds incur upkeep.
-- Optional challenges every four completed seasons reward 4 funds and reduce every city's queue by one. Wrong answers and skips carry no penalty.
-- Tap a card to read its complete effect. After selecting a city-targeted card, tap its city. Express Line targets the rail line itself.
-- First-launch onboarding is stored locally. The `?` button reopens it. Sound is opt-in; reduced-motion preferences disable animations. A run resets on page reload.
+- **Goal:** survive 24 seasons. Lose if queues reach **160 waiting passengers** (100% congestion), or funds fall below zero after upkeep. Prosperity measures successful deliveries: 5 points each, with no points for construction.
+- **Journeys:** each city has a named destination, shown on the map as `+new → destination`. The badge is its current waiting queue. Tap a city to see the destination highlighted and inspect its journey. Passengers only leave the queue when they actually arrive at their destination.
+- **Transfers:** passengers can travel along multiple connected lines. Every line on their journey uses one seat; every station visited uses one unit of station throughput. Journeys prefer shortest geographic rail paths and can use alternatives when the shortest path is full. Oldest passengers are served first, with round-robin dispatch among origins of the same age.
+- **Capacity:** ordinary lines carry 6 passengers total per season, shared by both directions and transfers. Stations handle 12 passengers per season. Orange lines are forecast to run full. Train animations only appear on lines with forecast traffic.
+- **Two actions per season:** building a route or playing a card consumes one. Unused actions expire. Longer geographic routes cost more funds. A direct route can bypass full hubs but costs more than a local connection.
+- **Preview first:** selecting two cities shows the route's actual effect on this season's deliveries, queues, and net income. Forecasts run the same simulation as dispatch and include the Grant's extra demand. A disconnected or unnecessary line can deliver zero extra passengers.
+- **Demand:** arrives before service each season. It rises at seasons 9 and 17. Prosperous cities attract one extra passenger per season; upgrades attract one, and Boom Towns two. Destinations are deterministic in this MVP.
+- **Income:** 3 base subsidy plus 1 fund per 3 delivered passengers, plus 2 for each Boom Town that actually delivers passengers. Upkeep costs 1 per 4 built routes, plus 1 per Express Line, plus 2 during each of the Civic Bonds' five repayment seasons.
+- **Cards:** Grant discounts the next line by 4 funds and adds 2 passengers at each endpoint. Survey discounts by 2 and adds 2 seats. Station Upgrade costs 4 funds for 6 extra station throughput and 1 extra demand. Express costs 3 for 4 extra line seats, with 1 upkeep each season. Boom Town adds 2 income when served and 2 demand. Civic Bonds provides 8 now and charges 10 over five seasons. Each replaces itself from a deterministic deck.
+- **Dispatch forecast:** tap the forecast beside End Season for every city's queue equation, missing connections, full stations, and the treasury calculation. Completing an unhelpful line cannot reduce queues just by touching a city.
+- Optional challenges every four completed seasons reward 4 funds and remove a waiting ticket at every city. Wrong answers and skips have no penalty.
+- First-launch onboarding is stored locally and versioned; the `?` button reopens it. Sound is opt-in; reduced-motion preferences disable animations. A run resets on page reload.
 
 ## Structure and validation
 
@@ -56,4 +60,4 @@ python3 -m http.server 4173 --directory /tmp/atlas-preview
 npm run test:browser
 ```
 
-Browser QA uses Playwright Chromium and WebKit with iPhone viewports, checks overflow, onboarding, cards, route construction, challenges, and full winning/losing loops at a GitHub Pages-style subpath. WebKit is a Safari engine compatibility check, not a claim of testing on physical iPhone hardware. Before a public launch, open the actual GitHub Pages URL on an iPhone and verify taps, landscape rotation, audio opt-in, and safe-area layout.
+Browser QA uses Playwright Chromium and WebKit with iPhone viewports, checks overflow in the map and route-preview states, onboarding, city destinations, helpful versus irrelevant line previews, exact forecast/dispatch agreement, cards, challenges, and full winning/losing loops at a GitHub Pages-style subpath. WebKit is a Safari engine compatibility check, not a claim of testing on physical iPhone hardware. Before a public launch, open the actual GitHub Pages URL on an iPhone and verify taps, landscape rotation, audio opt-in, and safe-area layout.
