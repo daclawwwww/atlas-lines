@@ -1,0 +1,1 @@
+{"name":"atlas-lines","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build --base=./","test":"node tests/game.test.js","test:browser":"node tests/browser.mjs"},"devDependencies":{"vite":"^7.1.0","@playwright/test":"^1.55.0"}}
