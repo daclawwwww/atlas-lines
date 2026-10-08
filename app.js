@@ -13,7 +13,8 @@ function render(){
  $('next').disabled=state.status!=='playing'||state.challenge!==null;$('next').innerHTML=state.turn===24?'Finish railway →':'End season <span>→</span>';
  $('forecast').innerHTML=`<b>This season: ${f.served} arrive · ${f.waiting} still waiting</b><span>${signed(f.income)} funds · tap for why</span>`;
  $('forecast').classList.toggle('danger',f.waiting>=QUEUE_LIMIT||f.income+state.funds<0);
- document.querySelector('.map-key span:last-child').textContent=plan?'Gold = planned stops · green = reused':'+new → destination · orange = full';
+ $('map').classList.toggle('connection-focus',!!selected&&!plan&&targetCard===null);
+ document.querySelector('.map-key span:last-child').textContent=plan?'Gold = planned stops · green = reused':selected&&targetCard===null?(state.actions?'Glow = can build · dotted = more funds':'No actions left · inspect cities'):'Glow = towns without rail';
  $('routes').replaceChildren();
  state.routes.forEach((r,i)=>{
   const a=CITIES.find(c=>c.id===r.a),b=CITIES.find(c=>c.id===r.b),attrs={x1:a.x,y1:a.y,x2:b.x,y2:b.y};
@@ -27,9 +28,14 @@ function render(){
  $('cities').replaceChildren();const box=$('map').getBoundingClientRect(),verticalFix=(box.width/390)/(box.height/590);
  CITIES.forEach(c=>{
   const plannedStop=plan&&routeStops(...plan).includes(c.id),connected=state.routes.some(r=>r.a===c.id||r.b===c.id);
+  let connectStatus='',connectLabel='';
+  if(state.status==='playing'&&targetCard===null&&!plan){
+   if(selected&&selected!==c.id){const option=routePlan(state,selected,c.id);connectStatus=!option.newSegments.length?'existing':option.cost>state.funds?'more-funds':state.actions>0?'buildable':'';connectLabel=connectStatus==='existing'?'Track already exists.':connectStatus==='more-funds'?`New track needs ${option.cost} funds.`:connectStatus==='buildable'?`New track available for ${option.cost} funds.`:'';}
+   else if(!selected&&!connected){connectStatus='unserved';connectLabel='No rail serves this town yet.';}
+  }
   const city=state.cities[c.id],destination=selected&&DESTINATIONS[selected]===c.id,pressure=f.cityQueues[c.id]>city.queue;
-  const g=node('g',{class:`city ${selected===c.id?'selected':''} ${destination?'destination':''} ${pressure?'under-pressure':''} ${plannedStop?'planned-stop':''} ${connected?'connected':''}`,transform:`translate(${c.x} ${c.y}) scale(1 ${verticalFix})`,role:'button',tabindex:0,'aria-label':`${c.name}: ${city.queue} waiting for ${name(DESTINATIONS[c.id])}, ${demand(state,c.id)} more this season, ${f.byCity[c.id]} forecast to arrive`});
-  g.append(node('circle',{r:25,class:'hit'}));if(city.level>=1)for(let j=0;j<Math.floor(city.level)+1;j++)g.append(node('rect',{x:-16+j*7,y:-21-j%2*4,width:5,height:8+j%2*4,class:'growth'}));
+  const g=node('g',{class:`city ${selected===c.id?'selected':''} ${destination?'destination':''} ${pressure?'under-pressure':''} ${plannedStop?'planned-stop':''} ${connected?'connected':''} ${connectStatus}`, 'data-connect-status':connectStatus,transform:`translate(${c.x} ${c.y}) scale(1 ${verticalFix})`,role:'button',tabindex:0,'aria-label':`${c.name}: ${city.queue} waiting for ${name(DESTINATIONS[c.id])}, ${demand(state,c.id)} more this season, ${f.byCity[c.id]} forecast to arrive. ${connectLabel}`});
+  g.append(node('circle',{r:25,class:'hit'}));if(['buildable','unserved','more-funds'].includes(connectStatus))g.append(node('circle',{r:16,class:'connection-glow'}));if(city.level>=1)for(let j=0;j<Math.floor(city.level)+1;j++)g.append(node('rect',{x:-16+j*7,y:-21-j%2*4,width:5,height:8+j%2*4,class:'growth'}));
   if(selected===c.id||destination)g.append(node('circle',{r:17,class:'selection'}));
   g.append(node('circle',{r:9,class:'halo'}),node('circle',{r:3,fill:selected===c.id?'#fff7df':'#365a4c'}));
   const right=c.x<290&&!['har','scr'].includes(c.id),x=right?15:-15,anchor=right?'start':'end';
@@ -54,10 +60,10 @@ function render(){
   $('clear-city').onclick=clearSelection;
  }
 }
-function clearSelection(){selected=null;plan=null;targetCard=null;msg('Tap a city to see where its passengers need to go.');render();}
+function clearSelection(){selected=null;plan=null;targetCard=null;msg('Tap a city; available connections will glow.');render();}
 function tapCity(id){if(state.status!=='playing'||state.challenge!==null)return;tone(360);
  if(targetCard!==null){const before=forecast(state),title=CARDS[state.hand[targetCard]].name,error=playCard(state,targetCard,id);if(error)msg(error);else{const after=forecast(state);msg(`${title}: ${after.served-before.served} extra arrivals forecast. New demand: ${demand(state,id)} / season.`);targetCard=null;selected=null;}render();return;}
- if(!selected||selected===id){selected=selected===id?null:id;plan=null;msg(selected?'Destination highlighted. Tap another city to preview a line and all its stops.':'Selection cleared. Choose a city to inspect its journeys.');}else if(state.actions===0){selected=id;plan=null;msg('No actions left. You can inspect cities, then end the season.');}else{plan=[selected,id];msg('Every listed stop will connect. Existing track is reused.');}render();
+ if(!selected||selected===id){selected=selected===id?null:id;plan=null;msg(selected?'Glowing cities can add track. Dotted rings need more funds.':'Selection cleared. Choose a city to inspect its journeys.');}else if(state.actions===0){selected=id;plan=null;msg('No actions left. You can inspect cities, then end the season.');}else{plan=[selected,id];msg('Every listed stop will connect. Existing track is reused.');}render();
 }
 function tapRoute(i){const r=state.routes[i];if(targetCard!==null){const before=forecast(state),error=playCard(state,targetCard,i);if(error)msg(error);else{const after=forecast(state);targetCard=null;msg(`Express service: ${after.served-before.served} extra arrivals forecast · 1 fund upkeep.`);tone(650);}render();}else{const f=forecast(state);modal(`<span class="eyebrow">TRACK SEGMENT · SEASON ${state.turn}</span><h2>${name(r.a)} ↔ ${name(r.b)}</h2><p><b>${f.lineUsed[i]} of ${r.capacity} seats used this season</b>, shared by both directions and transferring passengers.</p><p>${f.lineUsed[i]===r.capacity?'This segment is full. An Express Line card or another route can relieve it.':'Spare seats remain. Check whether waiting passengers have a connected journey, or whether a station is full.'}</p><p>${f.deliveries.filter(d=>d.path.some((id,j)=>(id===r.a&&d.path[j+1]===r.b)||(id===r.b&&d.path[j+1]===r.a))).map(d=>`${short(d.from)} → ${short(d.to)}`).join(' · ')||'No completed journeys forecast on this line.'}</p><button class="primary" id="close-route">Back to the map</button>`);$('close-route').onclick=()=>$('modal').close();}}
 function modal(html){$('modal').innerHTML=html;$('modal').showModal();}
